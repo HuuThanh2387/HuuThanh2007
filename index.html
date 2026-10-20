@@ -82,6 +82,11 @@ h2{line-height:1.25}
 .dialog h2{line-height:1.27}
 .topline,.logo,.date-pill,.dialog .kicker{font-variant-ligatures:normal}
 
+
+/* Music controls: visible playback state, no layout changes on small phones. */
+#soundBtn[aria-pressed="true"]{background:linear-gradient(135deg,#f4c9d45b,#e5c0ff44);border-color:#ffe2e5aa;box-shadow:0 0 14px #f8c9de2a;animation:musicGlow 2.8s ease-in-out infinite}
+@keyframes musicGlow{50%{box-shadow:0 0 23px #f7c9f377}}
+@media(prefers-reduced-motion:reduce){#soundBtn[aria-pressed="true"]{animation:none}}
 </style>
 </head>
 <body>
@@ -90,7 +95,7 @@ h2{line-height:1.25}
 <header class="header">
 <div class="logo"><span class="tiny-star">✦</span><span class="label">KHU VƯỜN CỦA NHỮNG ĐIỀU ĐẸP</span></div>
 <div class="controls">
-<button class="icon-btn" id="soundBtn" type="button" aria-label="Bật âm thanh" title="Bật / tắt âm thanh">♫</button>
+<button class="icon-btn" id="soundBtn" type="button" aria-label="Bật nhạc nền" aria-pressed="false" title="Bật / tắt nhạc nền">♩</button>
 <button class="small-btn" id="settingsBtn" type="button">✎ Đổi tên</button>
 <span class="date-pill">20 <span aria-hidden="true">✦</span> 10</span>
 </div>
@@ -248,12 +253,14 @@ h2{line-height:1.25}
 <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-hidden="true"><div class="dialog" tabindex="-1"><button class="x" type="button" data-close="settingsModal" aria-label="Đóng">×</button><p class="kicker">Dành riêng cho người đặc biệt</p><h2 id="settingsTitle">Gửi một chút dịu dàng.</h2><div class="field"><label for="toInput">Tên người nhận</label><input id="toInput" placeholder="Ví dụ: Lan, Linh, Mai…" maxlength="28" autocomplete="off"></div><div class="field"><label for="fromInput">Tên người gửi (không bắt buộc)</label><input id="fromInput" placeholder="Ví dụ: Thành" maxlength="28" autocomplete="off"></div><div class="dialog-actions"><button class="primary" id="saveBtn" type="button">Lưu thay đổi</button><button class="secondary" id="copyLinkBtn" type="button">Sao chép link</button></div><p class="hint">Đăng file lên GitHub Pages / Netlify để gửi bằng liên kết. Nếu mở file trực tiếp, hãy gửi file HTML.</p></div></div>
 <div class="modal" id="letterModal" role="dialog" aria-modal="true" aria-labelledby="letterTitle" aria-hidden="true"><div class="dialog" tabindex="-1"><button class="x" type="button" data-close="letterModal" aria-label="Đóng">×</button><div class="paper-icon" aria-hidden="true">✿</div><p class="kicker">Lời nhắn nhỏ · 20/10</p><h2 id="letterTitle">Gửi cậu,<br>một ngày thật đẹp.</h2><p class="body-text" id="letterBody"></p><p class="sign" id="letterSign"></p><div class="dialog-actions"><button class="primary" id="newLetterBtn" type="button">Đổi một lá thư khác ♡</button><button class="secondary" id="copyLetterBtn" type="button">Sao chép</button></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<!-- Keep this MP3 next to index.html when publishing on GitHub Pages. -->
+<audio id="bgMusic" loop preload="none" playsinline src="nhac-nen-20-10.mp3"></audio>
 <script>
 (()=>{'use strict';
 const $=sel=>document.querySelector(sel), $$=sel=>Array.from(document.querySelectorAll(sel));
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const names=['welcome','garden','gift','sky','finale'];
-let scene=0, furthest=0, flowers=0, stars=0, giftStage=0, chosenGift='', to='', from='', sound=false, context=null, toastTimer=null, lastFocus=null, letterText='';
+let scene=0, furthest=0, flowers=0, stars=0, giftStage=0, chosenGift='', to='', from='', sound=false, musicPreference=null, musicFade=0, context=null, toastTimer=null, lastFocus=null, letterText='';
 const qp=new URLSearchParams(location.search);
 const clean=s=>String(s||'').replace(/[<>\x00-\x1f\x7f]/g,'').trim().slice(0,28);
 to=clean(qp.get('to'));from=clean(qp.get('from'));
@@ -324,7 +331,7 @@ function rail(id,num,total=3){const el=document.getElementById(id);el.replaceChi
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),2600)}
 function switchScene(n,force=false){if(n<0||n>=names.length||(!force&&n>furthest))return;scene=n;furthest=Math.max(furthest,n);$$('.scene').forEach((el,i)=>{el.classList.toggle('active',i===n);el.hidden=i!==n});$('#sceneCount').textContent=`0${n+1}/05`;$('#backBtn').disabled=n===0;$('#skipBtn').textContent=n===4?'Chia sẻ ✦':'Bỏ qua →';$$('.step-dot').forEach((el,i)=>{el.classList.toggle('current',i===n);el.classList.toggle('past',i<n);el.disabled=i>furthest});window.scrollTo({top:0,behavior:'instant'});if(n===4){updateNames();if(!$('#finalMessage').dataset.started){msg('finalMessage',nextUnique('final',finalLines));$('#finalMessage').dataset.started='1';} burst(innerWidth*.5,innerHeight*.5,68)}}
 function next(n){switchScene(n,true)}
-$('#startBtn').addEventListener('click',()=>{chime();next(1)});$('#backBtn').addEventListener('click',()=>switchScene(scene-1));$('#skipBtn').addEventListener('click',()=>{if(scene<4)next(scene+1);else show('settingsModal')});$$('.step-dot').forEach(el=>el.addEventListener('click',()=>switchScene(Number(el.dataset.go))));
+$('#startBtn').addEventListener('click',()=>{if(musicPreference!==false && !sound)startMusic();chime();next(1)});$('#backBtn').addEventListener('click',()=>switchScene(scene-1));$('#skipBtn').addEventListener('click',()=>{if(scene<4)next(scene+1);else show('settingsModal')});$$('.step-dot').forEach(el=>el.addEventListener('click',()=>switchScene(Number(el.dataset.go))));
 const gardenPositions=[[12,60,.85,325],[25,40,1,17],[40,64,.88,43],[54,46,1,345],[69,63,.91,283],[81,40,.98,34],[91,66,.75,328]];
 const garden=$('#garden');gardenPositions.forEach(([x,y,s,h],i)=>{const button=document.createElement('button');button.type='button';button.className='flower-spot';button.dataset.flower=i;button.style.cssText=`--x:${x}%;--y:${y}%;--s:${s};--h:${h};--z:${Math.floor(y/8)};--tilt:${i%2?-5:6}deg`;button.setAttribute('aria-label',`Làm nở bông hoa số ${i+1}`);button.innerHTML=`<span class="flower-head">${Array.from({length:6},(_,j)=>`<i style="--i:${j}"></i>`).join('')}<b></b></span>`;garden.append(button);button.addEventListener('click',ev=>{if(button.classList.contains('bloomed')){burst(ev.clientX,ev.clientY,12);return}button.classList.add('bloomed');flowers++;rail('gardenProgress',Math.min(flowers,3));msg('gardenMessage',nextUnique('garden',gardenLines));burst(ev.clientX,ev.clientY,30);chime();if(flowers>=3){$('#gardenNext').disabled=false;$('#gardenNext').textContent='Bước đến hộp quà →'}})});rail('gardenProgress',0);$('#gardenNext').addEventListener('click',()=>next(2));
 $('#bouquetBtn').addEventListener('click',ev=>{burst(ev.clientX||innerWidth/2,ev.clientY||innerHeight/2,65);chime()});
@@ -345,9 +352,58 @@ $('#copyLinkBtn').addEventListener('click',async()=>{saveNames();if(location.pro
 function makeLetter(){letterText=nextUnique('letter',letters);$('#letterBody').textContent=letterText;$('#letterTitle').textContent=`Gửi ${to||'cậu'}, một ngày thật đẹp.`;$('#letterSign').textContent=from?`— Từ ${from}, với những lời chúc tốt lành ♡`:'— Một người gửi cậu những lời chúc tốt lành ♡'}
 $('#openLetter').addEventListener('click',()=>{makeLetter();show('letterModal')});$('#newLetterBtn').addEventListener('click',()=>{makeLetter();chime()});$('#copyLetterBtn').addEventListener('click',async()=>toast(await copyText(`Gửi ${to||'cậu'},\n\n${letterText}\n\n${$('#letterSign').textContent}`)?'Đã sao chép lời nhắn ♡':'Không thể sao chép tự động.'));
 $$('[data-close]').forEach(btn=>btn.addEventListener('click',()=>hide(btn.dataset.close)));$$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)hide(m.id)}));document.addEventListener('keydown',e=>{if(e.key==='Escape')$$('.modal.open').forEach(m=>hide(m.id));const dialog=$('.modal.open');if(e.key==='Tab'&&dialog){const focusable=$$('button,input').filter(el=>dialog.contains(el)&&!el.disabled);if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
-// Audio is muted until the visitor explicitly enables it.
-$('#soundBtn').addEventListener('click',()=>{sound=!sound;$('#soundBtn').textContent=sound?'♫':'♩';$('#soundBtn').setAttribute('aria-label',sound?'Tắt âm thanh':'Bật âm thanh');toast(sound?'Đã bật âm thanh dịu nhẹ ♪':'Đã tắt âm thanh');if(sound)chime()});
-function chime(){if(!sound)return;try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;context=context||new AC();if(context.state==='suspended')context.resume();[659.25,830.61,987.77].forEach((freq,i)=>{const o=context.createOscillator(),g=context.createGain(),t=context.currentTime+i*.075;o.type='sine';o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.055,t+.016);g.gain.exponentialRampToValueAtTime(.0001,t+.46);o.connect(g).connect(context.destination);o.start(t);o.stop(t+.47)})}catch(e){}}
+// Background music: a user gesture is required by mobile/desktop browser autoplay policies.
+// The first press of the entrance button starts the music; the visitor can always mute it.
+const bgMusic=$('#bgMusic');
+const soundBtn=$('#soundBtn');
+const MUSIC_VOLUME=.32;
+function setMusicButton(playing){
+  sound=playing;
+  soundBtn.textContent=playing?'♫':'♩';
+  soundBtn.setAttribute('aria-label',playing?'Tắt nhạc nền':'Bật nhạc nền');
+  soundBtn.setAttribute('aria-pressed',String(playing));
+  soundBtn.title=playing?'Tắt nhạc nền':'Bật nhạc nền';
+}
+function fadeInMusic(){
+  cancelAnimationFrame(musicFade);
+  const initial=bgMusic.volume;
+  const startTime=performance.now();
+  const duration=reduced?0:1800;
+  const tick=now=>{
+    if(bgMusic.paused || !sound)return;
+    const t=duration?Math.max(0,Math.min((now-startTime)/duration,1)):1;
+    bgMusic.volume=initial+(MUSIC_VOLUME-initial)*(1-Math.pow(1-t,3));
+    if(t<1) musicFade=requestAnimationFrame(tick);
+  };
+  musicFade=requestAnimationFrame(tick);
+}
+function stopMusic(){
+  cancelAnimationFrame(musicFade);
+  bgMusic.pause();
+  bgMusic.volume=0;
+  setMusicButton(false);
+}
+function startMusic(){
+  // Call .play() immediately within the actual click/tap handler.
+  // Do not await anything before calling it, or browsers may block playback.
+  bgMusic.volume=0;
+  setMusicButton(true);
+  let pending;
+  try{pending=bgMusic.play()}
+  catch(e){setMusicButton(false);toast('Không phát được nhạc. Hãy thử bấm ♩.');return}
+  if(pending && typeof pending.then==='function'){
+    pending.then(()=>{if(sound)fadeInMusic();else bgMusic.pause()})
+      .catch(()=>{if(sound){setMusicButton(false);toast('Chạm vào ♩ để bật nhạc nhé.')}});
+  }else{fadeInMusic()}
+}
+soundBtn.addEventListener('click',()=>{
+  if(sound){musicPreference=false;stopMusic();toast('Đã tắt nhạc nền ♡')}
+  else{musicPreference=true;startMusic();toast('Đang bật nhạc nền ♪');}
+});
+bgMusic.addEventListener('error',()=>{
+  if(sound){stopMusic();toast('Chưa tìm thấy nhạc. Kiểm tra file nhac-nen-20-10.mp3 nhé.')}
+});
+function chime(){if(!sound)return;try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;context=context||new AC();if(context.state==='suspended')context.resume();[659.25,830.61,987.77].forEach((freq,i)=>{const o=context.createOscillator(),g=context.createGain(),t=context.currentTime+i*.075;o.type='sine';o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.016,t+.016);g.gain.exponentialRampToValueAtTime(.0001,t+.46);o.connect(g).connect(context.destination);o.start(t);o.stop(t+.47)})}catch(e){}}
 // One canvas, capped at 100 sprites: lightweight on mobile and completely offline.
 const canvas=$('#particles'),ctx=canvas.getContext('2d');let cw=0,ch=0,pr=1,particles=[],raf=0;
 function resize(){cw=innerWidth;ch=innerHeight;pr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(cw*pr);canvas.height=Math.round(ch*pr);ctx.setTransform(pr,0,0,pr,0,0)}
